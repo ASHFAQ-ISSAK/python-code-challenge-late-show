@@ -1,6 +1,7 @@
-from flask import Flask, jsonify
-from flask_migrate import Migrate
+from flask import Flask
+from flask_restful import Api, Resource
 from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///app.db"
@@ -8,19 +9,7 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
-
-
-class Episode(db.Model):
-    __tablename__ = "episodes"
-    id = db.Column(db.Integer, primary_key=True)
-    date = db.Column(db.DateTime, nullable=False)
-    number = db.Column(db.Integer, nullable=False)
-    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
-    updated_at = db.Column(
-        db.DateTime,
-        default=db.func.current_timestamp(),
-        onupdate=db.func.current_timestamp(),
-    )
+api = Api(app)
 
 
 class Appearance(db.Model):
@@ -50,79 +39,104 @@ class Guest(db.Model):
     )
 
 
-@app.route("/")
-def home():
-    return "Welcome to the Late Show!"
+class Episode(db.Model):
+    __tablename__ = "episodes"
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.DateTime, nullable=False)
+    number = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    updated_at = db.Column(
+        db.DateTime,
+        default=db.func.current_timestamp(),
+        onupdate=db.func.current_timestamp(),
+    )
 
 
-@app.route("/episodes", methods=["GET"])
-def get_episodes():
-    episodes = Episode.query.all()
-    data = [
-        {"id": episode.id, "date": episode.date, "number": episode.number}
-        for episode in episodes
-    ]
-    return jsonify(data)
+class GuestResource(Resource):
+    def get(self):
+        guests = Guest.query.all()
+        data = [
+            {"id": guest.id, "name": guest.name, "occupation": guest.occupation}
+            for guest in guests
+        ]
+        return data
 
 
-@app.route("/episodes/<int:episode_id>", methods=["GET"])
-def get_episode(episode_id):
-    episode = Episode.query.get(episode_id)
-    if episode:
-        data = {"id": episode.id, "date": episode.date, "number": episode.number}
-        return jsonify(data)
-    else:
-        return jsonify({"error": "Episode not found"}), 404
+class SingleGuestResource(Resource):
+    def get(self, guest_id):
+        guest = Guest.query.get(guest_id)
+        if guest:
+            data = {"id": guest.id, "name": guest.name, "occupation": guest.occupation}
+            return data
+        else:
+            return {"error": "Guest not found"}, 404
 
 
-@app.route("/guests", methods=["GET"])
-def get_guests():
-    guests = Guest.query.all()
-    data = [
-        {"id": guest.id, "name": guest.name, "occupation": guest.occupation}
-        for guest in guests
-    ]
-    return jsonify(data)
+class AppearanceResource(Resource):
+    def get(self):
+        appearances = Appearance.query.all()
+        data = [
+            {
+                "id": appearance.id,
+                "episode_id": appearance.episode_id,
+                "guest_id": appearance.guest_id,
+                "rating": appearance.rating,
+            }
+            for appearance in appearances
+        ]
+        return data
 
 
-@app.route("/guests/<int:guest_id>", methods=["GET"])
-def get_guest(guest_id):
-    guest = Guest.query.get(guest_id)
-    if guest:
-        data = {"id": guest.id, "name": guest.name, "occupation": guest.occupation}
-        return jsonify(data)
-    else:
-        return jsonify({"error": "Guest not found"}), 404
+class SingleAppearanceResource(Resource):
+    def get(self, appearance_id):
+        appearance = Appearance.query.get(appearance_id)
+        if appearance:
+            data = {
+                "id": appearance.id,
+                "episode_id": appearance.episode_id,
+                "guest_id": appearance.guest_id,
+                "rating": appearance.rating,
+            }
+            return data
+        else:
+            return {"error": "Appearance not found"}, 404
 
 
-@app.route("/appearances", methods=["GET"])
-def get_appearances():
-    appearances = Appearance.query.all()
-    data = [
-        {
-            "id": appearance.id,
-            "episode_id": appearance.episode_id,
-            "guest_id": appearance.guest_id,
-            "rating": appearance.rating,
-        }
-        for appearance in appearances
-    ]
-    return jsonify(data)
+class EpisodeResource(Resource):
+    def get(self):
+        episodes = Episode.query.all()
+        data = [
+            {"id": episode.id, "date": episode.date, "number": episode.number}
+            for episode in episodes
+        ]
+        return data
 
 
-@app.route("/appearances/<int:appearance_id>", methods=["GET"])
-def get_appearance(appearance_id):
-    appearance = Appearance.query.get(appearance_id)
-    if appearance:
-        data = {
-            "id": appearance.id,
-            "episode_id": appearance.episode_id,
-            "guest_id": appearance.guest_id,
-            "rating": appearance.rating,
-        }
-        return jsonify(data)
-    else:
-        return jsonify({"error": "Appearance not found"}), 404
+class SingleEpisodeResource(Resource):
+    def get(self, episode_id):
+        episode = Episode.query.get(episode_id)
+        if episode:
+            data = {"id": episode.id, "date": episode.date, "number": episode.number}
+            return data
+        else:
+            return {"error": "Episode not found"}, 404
+
+    def delete(self, episode_id):
+        episode = Episode.query.get(episode_id)
+        if episode:
+            db.session.delete(episode)
+            db.session.commit()
+            return {"message": "Episode deleted successfully"}
+        else:
+            return {"error": "Episode not found"}, 404
+
+
+api.add_resource(EpisodeResource, "/episodes")
+api.add_resource(SingleEpisodeResource, "/episodes/<int:episode_id>")
+api.add_resource(GuestResource, "/guests")
+api.add_resource(SingleGuestResource, "/guests/<int:guest_id>")
+api.add_resource(AppearanceResource, "/appearances")
+api.add_resource(SingleAppearanceResource, "/appearances/<int:appearance_id>")
 
 
 if __name__ == "__main__":
